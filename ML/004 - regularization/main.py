@@ -37,7 +37,7 @@ class Line:
         x, y = data
 
 
-    def least_squares_ridge(self, data, lambdas=np.logspace(-3, 3, 20), cross_validation=10):
+    def least_squares_regularization(self, data, lambdas=np.logspace(-3, 3, 20), cross_validation=10, mode="ridge"):
 
         x, y = data
         data_length = len(x)
@@ -66,12 +66,12 @@ class Line:
                 x_train = np.concatenate((x[:start], x[end:]))
                 y_train = np.concatenate((y[:start], y[end:]))
 
-
-                X = np.c_[x_train, np.ones(len(x_train))]
-                theta = np.linalg.inv(
-                    X.T @ X + λ * np.array([[1,0], [0, 0]])
-                ) @ X.T @ y_train
-
+                if mode == "ridge":
+                    X = np.c_[x_train, np.ones(len(x_train))]
+                    theta = np.linalg.inv(
+                        X.T @ X + λ * np.array([[1,0], [0, 0]])
+                    ) @ X.T @ y_train
+                
                 slope = theta[0]
                 intercept = theta[1]
                 
@@ -110,4 +110,4 @@ def visualize(slope, intercept, data, color):
 
 line = Line()
 
-line.least_squares_ridge(generate_data(20))
+line.least_squares_regularization(generate_data(20), mode="lasso")
