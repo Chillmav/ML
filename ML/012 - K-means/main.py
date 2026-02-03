@@ -13,6 +13,7 @@ class kMeans:
         self.k = k
         self.max_iters = max_iters
         self.labels = 0
+        
     def fit(self):
 
             indices = np.random.choice(len(self.data), size=self.k, replace=False)
