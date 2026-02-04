@@ -67,7 +67,6 @@ class NaiveBaiseClassifier:
                 guessed += 1
 
         return guessed / len(labels)
-        pass
 
     def predict_label(self, text):
 
