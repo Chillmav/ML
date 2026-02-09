@@ -97,8 +97,8 @@ class ClassificationTree:
             for (j) in range(2):
                 s = np.sum(options[:, j])
                 if s > 0:
-                    options[:, j] /= s
-                    impurity[j] = 1 - np.sum(options[:, j]**2)
+                    p = options[:, j] / s
+                    impurity[j] = 1 - np.sum(p ** 2)
             impurity = (impurity[0] * weights[0]) + (impurity[1] * weights[1])
             gini_impurities[i] = impurity
 
@@ -110,15 +110,15 @@ class ClassificationTree:
 
         mask = X[:, feature] < threshold 
 
-        X_left = X[mask] # true
+        X_left = X[mask] 
         Y_left = Y[mask]
 
-        X_right = X[~mask] # false
+        X_right = X[~mask] 
         Y_right = Y[~mask]
 
         return X_left, Y_left, X_right, Y_right
     
-    def predict(self, X, Y, node: Node, predicted):
+    def predict(self, X, Y, node: Node):
 
         if (node.value != None):
             return np.sum(Y == node.value)
@@ -126,15 +126,18 @@ class ClassificationTree:
         feature = node.feature
         threshold = node.threshold
         X_left, Y_left, X_right, Y_right = self.split_data(X, Y, feature=feature, threshold=threshold)
-        predicted += self.predict(X_left, Y_left, node.left, predicted)
-        predicted += self.predict(X_right, Y_right, node.right, predicted)
+        return (
+            self.predict(X_left, Y_left, node.left) +
+            self.predict(X_right, Y_right, node.right)
+        )
+
 
 
 model = ClassificationTree()
 model.n_labels = len(np.unique(Y_train))
 model.root = model.build(X_train, Y_train)
 predicted = 0
-predicted = model.predict(X_test, Y_test, model.root, predicted)
+predicted = model.predict(X_test, Y_test, model.root)
 
 print(predicted / len(Y_test))
 
