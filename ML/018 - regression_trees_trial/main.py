@@ -97,7 +97,7 @@ class RegressionTree:
 
         return X[mask], Y[mask], X[~mask], Y[~mask]
 
-    def cross_validation(self, X, Y):
+    def split(self, X, Y):
 
         data = np.c_[X, Y]
         size = data.shape[0]
@@ -111,9 +111,6 @@ class RegressionTree:
 
         if (node.value != None):
 
-            for i in range(Y.shape[0]):
-                print(f"Real: {Y[i]} | Predicted: {node.value}")
-                plt.scatter(X[i, 0], node.value, color="green")
             return self.SSR(node.value, Y)
         
         feature = node.feature
@@ -147,38 +144,101 @@ class RegressionTree:
 
         )
 
-    def prune(self, node: Node, X: np.ndarray, Y: np.ndarray, fold=10):
+    def SSE_node(self, node: Node, X, Y):
+                
+        if (node.value != None):
+            return self.SSR(node.value, Y)
 
-        averages = np.zeros(self.leafs)
+        return self.SSR(np.mean(Y), Y)
 
-        for i in range(fold):
+    def calc_leafs(self, node: Node):
 
-            X_train, Y_train, X_test, Y_test = self.cross_validation(X, Y)
-            while (self.leafs):
-                pass
+        if (node.value != None):
+            return 1
 
-    def calc_alphas(self, node: np.ndarray, X: np.ndarray, Y: np.ndarray):
+        return (
+            self.calc_leafs(node.right) + self.calc_leafs(node.left)
+        )
+    
+    def calc_alpha(self, node: Node, X, Y):
 
-        leafs = self.leafs
-        self.alphas = np.zeros(self.leafs) # from deepest
-        tree_score = self.calc_tree_score(node, X, Y) + leafs * self.alphas[0]
+        SSE_subtree = self.calc_tree_score(node, X, Y)
+        SSE_node = self.SSE_node(node, X, Y)
+        leafs = self.calc_leafs(node)
+        if (leafs == 1):
+            return np.inf
+        else:
+            return (SSE_node - SSE_subtree) / (leafs - 1)
 
-        for i in range(self.leafs):
-            leafs -= 1
-            new_tree_score = np.inf
-            while new_tree_score > tree_score:
-                self.alphas[i+1] += 1
-                self.calc_tree_score(node, X, Y)
+    def find_weakest(self, node: Node, X, Y):
 
+        if (node.value != None):
+            return np.inf, None, None, None
+    
+        alpha1 = self.calc_alpha(node, X, Y)
+        feature = node.feature
+        threshold = node.threshold
+        X_left, Y_left, X_right, Y_right = self.split_dataset(X, Y, feature=feature, threshold=threshold)
 
+        alpha2, node2, _, _ = self.find_weakest(node.right, X_right, Y_right)
+        alpha3, node3, _, _ = self.find_weakest(node.left, X_left, Y_left)
 
+        choices = np.array([alpha1, alpha2, alpha3])
+        nodes = [node, node2, node3]
+        data = [[X, Y], [X_right, Y_right], [X_left, Y_left]]
+        idx = np.argmin(choices)
+        return choices[idx], nodes[idx], data[idx][0], data[idx][1]
+    
+    def prune(self, node: Node, X, Y):
+
+        right_leafs = self.calc_leafs(node.right)
+        left_leafs = self.calc_leafs(node.left)
+        node.right = None
+        node.left = None
+        node.value = np.mean(Y)
+        self.leafs -= (right_leafs + left_leafs - 1)
+    
+    def build_prune(self, root: Node, X, Y):
+
+        results = np.zeros((self.leafs - 1, 4))
+        i = 0
+        while self.leafs > 1:
+            alpha, node, x, y = self.find_weakest(root, X, Y)
+            self.prune(node, x, y)
+            results[i, 0] = alpha
+            results[i, 1] = self.calc_tree_score(root, X, Y)
+            results[i, 2] = self.calc_leafs(root)
+            i += 1
+        return results
+    
+    def CV(self, X, Y, folds=10):
+
+        model = RegressionTree(X, Y)
+        model.root = model.build(X, Y)
+        pruning_path = model.build_prune(model.root, X, Y)
+        means = np.zeros(pruning_path.shape[0])
+
+        for _ in range(folds):
+            self.leafs = 0
+            X_train, Y_train, X_test, Y_test = self.split(X, Y)
+            train_tree = self.build(X_train, Y_train)
+
+            means[0] += self.predict(train_tree, X_test, Y_test)
+
+            for j, alpha in enumerate(pruning_path):
+                _, node, X_node, Y_node = self.find_weakest(train_tree, X_train, Y_train)
+                if node is None:
+                    break 
+                self.prune(node, X_node, Y_node)
+                means[j+1] += self.predict(train_tree, X_test, Y_test)
+
+        means /= folds
+        return means
+        
 model = RegressionTree(X, Y, 10)
-model.root = model.build(X, Y)
-X_train, Y_train, X_test, Y_test = model.cross_validation(X, Y)
-SSE = model.predict(model.root, X_test, Y_test)
-print(f"SSE: {SSE}")
-model.calc_alphas(model.root, X, Y)
-
+means = model.CV(X, Y, 10)
+print(means)
+plt.plot(means)
 plt.scatter(X, Y, color="blue")
 plt.show()
 
