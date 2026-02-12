@@ -49,28 +49,41 @@ class RandomForest:
 
         for v in range(1, self.columns + 1):
             forest = [] # self.trees roots
-            sum_of_predictions = 0
-            validation_size = 0
+
+            votes = {i: [] for i in range(len(Y))}
             for _ in range(self.trees):
 
                 variables = sorted(np.random.choice(np.arange(self.columns), v, replace=False))
                 x = X[:, variables]
-                bootstrapped_X, bootstrapped_Y, oob_X, oob_Y = self.bootstrap(x, Y)
+                bootstrapped_X, bootstrapped_Y, oob_X, oob_Y, indices = self.bootstrap(x, Y)
                 tree = self.build_tree(bootstrapped_X, bootstrapped_Y)
-                predicted = self.calc_predicted(tree, oob_X, oob_Y)
-                sum_of_predictions += predicted   
-                validation_size += len(oob_Y)      
-                forest.append(tree)     
+                self.calc_predicted(tree, oob_X, oob_Y, votes, indices)
+                forest.append(tree)    
 
-            accuracy = sum_of_predictions / validation_size          
-
+            accuracy = self.eval_votes(votes, Y)
             results.append([forest, accuracy, v])
-
         accuracies = [r[1] for r in results]
         idx = np.argmax(accuracies)
         result = results[idx]
         self.forest = result[0]
         return result[0], result[1], result[2]
+    
+    def eval_votes(self, votes: dict, Y):
+        
+        n = len(Y)
+        predictions = np.zeros(n)
+
+        for key, value in votes.items():
+            if len(value) == 0:
+                predictions[key] = -1
+                continue
+
+            values, counts = np.unique(value, return_counts=True)
+            most_common = values[np.argmax(counts)]
+            predictions[key] = most_common
+
+        mask = predictions != -1
+        return np.sum(predictions[mask] == Y[mask]) / np.sum(mask)
     
     def build_tree(self, X: np.ndarray, Y: np.ndarray):
         
@@ -159,21 +172,16 @@ class RandomForest:
 
         oob_X = X[oob_mask]
         oob_Y = Y[oob_mask]
+        indices = np.flatnonzero(oob_mask)
 
-        return bootstrapped_X, bootstrapped_Y, oob_X, oob_Y
+        return bootstrapped_X, bootstrapped_Y, oob_X, oob_Y, indices
     
-    def calc_predicted(self, node: Node, oob_X, oob_Y):
+    def calc_predicted(self, node: Node, oob_X, oob_Y, votes: dict, indices):
 
-        if (node.value != None):
-            return np.sum(node.value == oob_Y)
-
-        X_right, Y_right, X_left, Y_left = self.split_data(node, oob_X, oob_Y)
-
-        return (
-            self.calc_predicted(node.right, X_right, Y_right) +
-            self.calc_predicted(node.left, X_left, Y_left)
-        )
-
+        for i, (x, y) in enumerate(zip(oob_X, oob_Y)):
+            index = indices[i]
+            votes[index].append(self.sample_prediction(node, x, y))
+        
     def sample_prediction(self, node, x, y):
 
         if (node.value != None):
@@ -216,6 +224,5 @@ class RandomForest:
 model = RandomForest(labels=len(np.unique(Y_train)))
 forest, accuracy_oob, features = model.build_forest(X_train, Y_train)
 accuracy = model.predict(X_test, Y_test)
-
 print(accuracy_oob)
 print(features)
