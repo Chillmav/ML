@@ -5,18 +5,34 @@ np.random.seed(42)
 
 class TSMGenetic:
 
-    def __init__(self, pop_size=60, n=10, epochs=500, p_m=0.10):
+    def __init__(self, pop_size=60, n=10, epochs=150, p_m=0.10, size=800):
 
         self.pop_size = pop_size
         self.n = n
         self.epochs = epochs
+        self.size = size
         self.cities = self.init_cities()
+
+        self.cities = np.array([
+            [308, 252],   
+            [165, 100],   
+            [640, 180],   
+            [666, 153],   
+            [727, 108],   
+            [774, 143],   
+            [996, 307],   
+            [750, 54],  
+            [607, 304],  
+            [700, 510]    
+        ])
+
         self.population = []
         self.p_m = p_m
+        self.routes = np.zeros((self.epochs, pop_size, self.n), dtype=int)
 
     def init_cities(self):
 
-        return np.random.uniform(-10, 10, (self.n, 2))
+        return np.random.randint(0, self.size, (self.n, 2))
 
     def visualize(self):
 
@@ -28,12 +44,13 @@ class TSMGenetic:
 
     def train(self):
 
-        self.visualize()
         self.init_pop()
+        self.select_best(self.population)
+        self.routes[0] = self.population
 
         for e in range(self.epochs):
 
-            distances = self.compute_total_distances()
+            distances = self.compute_total_distances(self.population)
             if (e % 50 == 0):
                 print(f"Mean distance in epoch {e}: {np.mean(distances)}")
             surviviors = self.selection(distances)
@@ -41,10 +58,20 @@ class TSMGenetic:
             new_population = np.concatenate((surviviors, offspring))
             self.mutate(new_population)
             self.population = new_population
+            self.select_best(self.population)
+            self.routes[e] = self.population
+            if (e % 50 == 0):
+                print(self.compute_total_distances(self.population)[-1])
 
-        distances = self.compute_total_distances()
-        print(self.population)
-        print(self.population[np.argmin(distances)])
+        distances = self.compute_total_distances(self.population) 
+
+    def select_best(self, population):
+
+        distances = self.compute_total_distances(population)
+        idx = np.argmin(distances)
+        population[-1], population[idx] = population[idx], population[-1]
+
+        return distances[np.argmin(distances)]
 
     def selection(self, distances): 
 
@@ -118,11 +145,11 @@ class TSMGenetic:
             self.population[i, 1:] = path
         
 
-    def compute_total_distances(self):
+    def compute_total_distances(self, population):
 
         distances = np.zeros(self.pop_size)
 
-        for i, path in enumerate(self.population):
+        for i, path in enumerate(population):
             
             distances[i] = self.compute_dist(path)
 
