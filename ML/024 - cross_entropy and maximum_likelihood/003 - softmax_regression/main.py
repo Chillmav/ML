@@ -1,15 +1,40 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import time
+import pandas as pd
 
 np.random.seed(42)
-X0 = np.random.normal(0, 1, 400).reshape(-1, 1)
-X1 = np.random.normal(3, 1, 600).reshape(-1, 1)
-X2 = np.random.normal(5, 1, 400).reshape(-1, 1)
-X = np.concatenate([X0, X1, X2])
-Y_0 = np.zeros(400, dtype=int)
-Y_1 = np.ones(600, dtype=int)
-Y_2= np.full(400, 2, dtype=int)
-Y = np.concatenate([Y_0, Y_1, Y_2])
+# X0 = np.random.normal(0, 1, 400).reshape(-1, 1)
+# X1 = np.random.normal(3, 1, 600).reshape(-1, 1)
+# X2 = np.random.normal(5, 1, 400).reshape(-1, 1)
+# X = np.concatenate([X0, X1, X2])
+# Y_0 = np.zeros(400, dtype=int)
+# Y_1 = np.ones(600, dtype=int)
+# Y_2= np.full(400, 2, dtype=int)
+# Y = np.concatenate([Y_0, Y_1, Y_2])
+
+df = pd.read_csv("ML/data/obesity_data.csv")
+
+X = df[["Height","Weight", "Age", "BMI", "PhysicalActivityLevel"]].values
+
+Y = df["ObesityCategory"].map({
+
+    "Underweight": 0,
+    "Normal weight": 1,
+    "Overweight": 2,
+    "Obese": 3
+
+}).values
+
+
+def standardization(X: np.ndarray):
+
+    for j in range(X.shape[1]):
+        X[:, j] = (X[:, j] - np.mean(X[:, j])) / np.std(X[:, j])
+
+    return X
+
+X = standardization(X)
 
 data = np.c_[X, Y]
 
@@ -27,28 +52,27 @@ X_train, Y_train, X_test, Y_test = train_data[:, :-1], train_data[:, -1], test_d
 
 class SoftmaxRegression:
 
-    def __init__(self, epochs = 1000, lr=0.01):
+    def __init__(self, epochs = 1000, lr=0.1):
 
-        self.epochs = 1000
+        self.epochs = epochs
         self.theta = []
         self.lr = lr
         self.labels = 0
 
     def train(self, X, Y):
 
+        start = time.clock_gettime_ns(0)
+
         self.labels = len(np.unique(Y))
         X = np.c_[X, np.ones(X.shape[0])]
-        self.theta = np.zeros((self.labels, X.shape[1]))
+        self.theta = np.random.uniform(-1, 1, (self.labels, X.shape[1]))
         Y = self.one_hot(Y)
 
-        for l in range(self.labels):
-            self.theta[l] = np.random.uniform(-1, 1, size=X.shape[1])
+        for _ in range(self.epochs):
+            gradient = ((self.softmax(X) - Y).T @ X) / X.shape[0]
+            self.theta -= self.lr * gradient
 
-        for e in range(self.epochs):
-            gradient = (self.softmax(X) - Y).T @ X
-            self.theta -= self.lr * (gradient / Y.shape[0])
-
-
+        print(f"Training time: {(time.clock_gettime_ns(0) - start) / 1e9} seconds")
         print(self.theta)
     
     def test(self, X, Y):
@@ -60,23 +84,12 @@ class SoftmaxRegression:
         return accuracy
     
     def softmax(self, X):
-
-        P = np.zeros((X.shape[0], self.labels))
-
-        for i in range(X.shape[0]):
-
-            z = np.zeros(self.labels)
-
-            # logits
-            for l in range(self.labels):
-                z[l] = X[i] @ self.theta[l]
-
-            # stabilność
-            z = z - np.max(z)
-
-            exp_z = np.exp(z)
-
-            P[i] = exp_z / np.sum(exp_z)
+        
+        Z = np.zeros((X.shape[0], self.labels))
+        Z = X @ self.theta.T
+        Z = Z - np.max(Z, axis=1, keepdims=True)
+        exp_Z = np.exp(Z)
+        P = exp_Z / np.sum(exp_Z, axis=1, keepdims=True)
 
         return P
     
