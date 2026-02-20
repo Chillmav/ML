@@ -6,9 +6,9 @@ X0 = np.random.normal(0, 1, 400).reshape(-1, 1)
 X1 = np.random.normal(3, 1, 600).reshape(-1, 1)
 X2 = np.random.normal(5, 1, 400).reshape(-1, 1)
 X = np.concatenate([X0, X1, X2])
-Y_0 = np.zeros(400)
-Y_1 = np.ones(600)
-Y_2= np.full(400, 2)
+Y_0 = np.zeros(400, dtype=int)
+Y_1 = np.ones(600, dtype=int)
+Y_2= np.full(400, 2, dtype=int)
 Y = np.concatenate([Y_0, Y_1, Y_2])
 
 data = np.c_[X, Y]
@@ -37,16 +37,28 @@ class SoftmaxRegression:
     def train(self, X, Y):
 
         self.labels = len(np.unique(Y))
-        self.theta = np.zeros((self.labels, X.shape[1] + 1))
+        X = np.c_[X, np.ones(X.shape[0])]
+        self.theta = np.zeros((self.labels, X.shape[1]))
+        Y = self.one_hot(Y)
 
         for l in range(self.labels):
-            self.theta[l] = np.random.uniform(-1, 1, size=X.shape[1] + 1)
+            self.theta[l] = np.random.uniform(-1, 1, size=X.shape[1])
 
-        print(self.softmax(X))
         for e in range(self.epochs):
-            pass
+            gradient = (self.softmax(X) - Y).T @ X
+            self.theta -= self.lr * (gradient / Y.shape[0])
 
-            
+
+        print(self.theta)
+    
+    def test(self, X, Y):
+
+        X = np.c_[X, np.ones(X.shape[0])]
+        predicted = self.softmax(X)
+        predicted = np.argmax(predicted, axis=1)
+        accuracy = np.sum(Y == predicted) / len(Y)
+        return accuracy
+    
     def softmax(self, X):
 
         P = np.zeros((X.shape[0], self.labels))
@@ -57,7 +69,7 @@ class SoftmaxRegression:
 
             # logits
             for l in range(self.labels):
-                z[l] = self.theta[l][0] + np.dot(self.theta[l][1:], X[i])
+                z[l] = X[i] @ self.theta[l]
 
             # stabilność
             z = z - np.max(z)
@@ -68,6 +80,17 @@ class SoftmaxRegression:
 
         return P
     
+    def one_hot(self, Y):
+
+        Y_one_hot = np.zeros((len(Y), self.labels), dtype=int)
+
+        for i, y in enumerate(Y):
+            Y_one_hot[i, int(y)] = 1
+
+        return Y_one_hot
+    
 model = SoftmaxRegression()
 
 model.train(X_train, Y_train)
+acc = model.test(X_test, Y_test)
+print(acc)
