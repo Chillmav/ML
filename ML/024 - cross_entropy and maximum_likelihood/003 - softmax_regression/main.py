@@ -103,7 +103,6 @@ class SoftmaxRegression:
         return Y_one_hot
     
 model = SoftmaxRegression()
-
 model.train(X_train, Y_train)
 acc = model.test(X_test, Y_test)
 print(acc)
