@@ -29,6 +29,7 @@ def PCA(X: np.ndarray, k=2):
     x_mean = np.mean(X, axis=0).reshape(-1, 1).T
     ones = np.ones(X.shape[0]).reshape(-1, 1)
     X_mean = ones @ x_mean
+    print()
 
     B = X - X_mean # data with zero mean (in theory)
 
