@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+
 df = pd.read_csv("ML/data/obesity_data.csv")
 X = df[["Age", "Height", "Weight", "BMI", "PhysicalActivityLevel"]].values
 age = df["Gender"].map({
@@ -32,134 +33,189 @@ X_train, Y_train, X_test, Y_test = train_data[:, :-1], train_data[:, -1], test_d
 
 class Node:
 
-    def __init__(self, feature=None, threshold=None, left=None, right=None, value=None, discrete=False):
+    def __init__(self, feature=None, threshold=None, left=None, right=None, value=None, aos=None):
 
-        self.feature = feature
+        self.feature = feature # index
         self.threshold = threshold
         self.left = left 
         self.right = right
-        self.value = value
-        self.discrete = discrete
+        self.aos = aos
 
 class AdaBoost:
 
-    def __init__(self, stumps=100, labels=4):
+    def __init__(self, stumps=100):
 
         self.columns = 0
         self.stumps = stumps
-        self.labels = labels
+        self.labels = 0
         self.forest = []
+        self.weights = []
 
     def build_forest(self, X, Y):
 
-        init_sample_weights = 1 / X.shape[0]
-        print(init_sample_weights)
+        self.weights = np.full(X.shape[0], 1 / X.shape[0])
+        self.labels = len(np.unique(Y))
 
-    def build_stump(self, X: np.ndarray, Y: np.ndarray, sample_weights: np.ndarray = []):
+        for _ in range(self.stumps): # self.stumps later
 
-        n_samples, n_features = X.shape
-        best_feature = None
-        best_threshold = None
-        best_discrete = False
-        results = np.zeros((X.shape[1], 4)) # val: [feature, threshold, impurity, isDiscrete]
+            stump, total_error = self.build_stump(X, Y)
 
-        for feature in range(X.shape[1]):
+            if stump is None:
+                continue
 
-            values = X[:, feature]
-            unique_vals = np.unique(values)
+            self.forest.append(stump)
 
-            if (len(unique_vals) > 2): # continous feature:
+            if total_error == 0:
+                break
 
-                # Sort feature and labels
-                sorted_idx = np.argsort(values)
-                sorted_values = values[sorted_idx]
-                sorted_labels = Y[sorted_idx]
-                thresholds = (sorted_values[:-1] + sorted_values[1:]) / 2 # wow
-                thresholds = np.unique(thresholds)
+    def build_stump(self, X: np.ndarray, Y: np.ndarray):
 
-                impurities = np.zeros(len(thresholds))
+        n_features = X.shape[1]
+        best_gini_impurities = np.zeros((n_features, 3)) # slots for label
+        best_thresholds = np.zeros(n_features)
 
-                for j, threshold in enumerate(thresholds):
+        for i in range(n_features): # n_features
+            
+            x = X[:, i]
+            sorting_indices = np.argsort(x)
+            x_sorted = x[sorting_indices]
+            x_sorted_unique = np.unique(x_sorted)
+            thresholds = (x_sorted_unique[:-1] + x_sorted_unique[1:])/2
+            gini_impurities = np.zeros((len(thresholds), 3)) # slots for label
 
-                    options = np.zeros((self.labels, 2))
-                    samples = len(Y)
+            for j, threshold in enumerate(thresholds):
+                
+                _, left_Y, left_weights, _, right_Y, right_weights = self.split_XY(x, Y, threshold)
 
-                    for x, y in zip(X[:, feature], Y):
+                left_w_sum = np.sum(left_weights)
+                right_w_sum = np.sum(right_weights)
+                w_sum = left_w_sum + right_w_sum
 
-                        if x > threshold:
-                            options[int(y), 0] += 1 # True
-                        else:
-                            options[int(y), 1] += 1 # False
+                left_gini, left_label = self.calc_gini(left_Y, left_weights)
+                right_gini, right_label = self.calc_gini(right_Y, right_weights)
+
+                g_split = ((left_w_sum/w_sum) * left_gini) + ((right_w_sum/w_sum) * right_gini)
+                
+                gini_impurities[j] = g_split, left_label, right_label
+
+            best_gini_idx = np.argmin(gini_impurities[:, 0])
+            best_gini = gini_impurities[best_gini_idx]
+            best_threshold = thresholds[best_gini_idx]
+            best_gini_impurities[i] = best_gini
+            best_thresholds[i] = best_threshold
+
+        idx = np.argmin(best_gini_impurities[:, 0])
+        final_gini = best_gini_impurities[idx]
+        final_threshold = best_thresholds[idx]
+
+        total_error, wrong_indices = self.calc_total_error(X, Y, idx, final_threshold, int(final_gini[1]), int(final_gini[2]))
+
+        if total_error >= 1 - 1/self.labels:
+            return None, None
+        
+        aos = self.calc_AoS(total_error)
+        self.update_weights(np.array(wrong_indices), aos)
+        stump = Node(feature=idx, threshold=final_threshold, left=final_gini[1], right=final_gini[2], aos=aos)
+        
+        return stump, total_error
+    
+    def predict(self, X_test, Y_test):
+
+        predictions = np.zeros((len(Y_test), self.labels))
+
+        for i in range(len(Y_test)):
+            
+            for stump in self.forest:
+
+                feature = stump.feature 
+                threshold = stump.threshold
+                left_label = stump.left
+                right_label = stump.right
+                aos = stump.aos
+                x = X_test[i, feature]
+
+                if x < threshold:
                     
-                        true_samples = np.sum(options[:, 0])
-                        false_samples = np.sum(options[:, 1])
-                        weight_true = true_samples / samples
-                        weight_false = false_samples / samples
+                    predictions[i, int(left_label)] += aos
 
-                        impurity_true = 1
-                        impurity_false = 1
+                else:
 
-                        for label in range(self.labels):
-                            if true_samples > 0:
-                                impurity_true -= (options[label, 0] / true_samples)**2
-                            if false_samples > 0:
-                                impurity_false -= (options[label, 1] / false_samples)**2
+                    predictions[i, int(right_label)] += aos
+        predictions = np.argmax(predictions, axis=1)
 
-                        impurities[j] = impurity_true*weight_true + impurity_false*weight_false
+        print(f"Accuracy: {np.sum(predictions == Y_test) / len(Y_test)}")
 
-                idx_of_min_impurity = np.argmin(impurities)
-                threshold = thresholds[idx_of_min_impurity]
-                impurity = impurities[idx_of_min_impurity]
+    def calc_total_error(self, X, Y, feature, threshold, left_label, right_label):
 
-                results[feature, 0] = feature
-                results[feature, 1] = threshold
-                results[feature, 2] = impurity
-                results[feature, 3] = 0 # for continous data
+        total_error = 0
+        x = X[:, feature]
+        indices = []
+        for i in range(len(Y)):
 
+            if x[i] < threshold:
 
-            else: # boolean feature (gender for example):
-                print(len(np.unique(feature)))
-                options = np.zeros((self.labels, 2))
-                samples = len(Y)
+                if int(Y[i]) != int(left_label):
+                    total_error += self.weights[i]
+                    indices.append(i)
+            else:
 
-                for (x, y) in zip(X[:, feature], Y):
-                    
-                    if x == X[0, feature]:
-                        options[int(y), 0] += 1 # True
-                    else:
-                        options[int(y), 1] += 1 # False
-                    
-                    true_samples = np.sum(options[:, 0])
-                    false_samples = np.sum(options[:, 1])
-                    weight_true = true_samples / samples
-                    weight_false = false_samples / samples
+                if (int(Y[i]) != int(right_label)):
+                    total_error += self.weights[i]
+                    indices.append(i)
+        
+        return total_error, indices
 
-                    impurity_true = 1
-                    impurity_false = 1
+        
+    def calc_gini(self, Y, weights):
 
-                    for label in range(self.labels):
-                        if true_samples > 0:
-                            impurity_true -= (options[label, 0] / true_samples)**2
-                        if false_samples > 0:
-                            impurity_false -= (options[label, 1] / false_samples)**2
-                    
-                    impurity = impurity_true*weight_true + impurity_false*weight_false
-                    threshold = X[0, feature]
+        w_per_k = np.zeros(self.labels)
 
-                    results[feature, 0] = feature
-                    results[feature, 1] = threshold
-                    results[feature, 2] = impurity
-                    results[feature, 3] = 1 # for discrete data
+        for i in range(self.labels):
 
-        idx = np.argmin(results[:, 2])   
-        print(results[idx])
-        return results[idx]
+            w_per_k[i] = np.sum(weights[Y == i])
+        
+        
+        if np.sum(w_per_k) == 0:
+            return 0, np.argmax(w_per_k)
+        
+        weighted_p_k = np.sum([(w_per_k[i] / np.sum(w_per_k))**2 for i in range(self.labels)])
+        
+        return 1 - weighted_p_k, np.argmax(w_per_k)
 
-model = AdaBoost(100, len(np.unique(Y)))
+    def split_XY(self, X, Y, threshold):
 
+        mask = X < threshold
+        left_X, left_Y, left_weights = X[mask], Y[mask], self.weights[mask]
+        right_X, right_Y, right_weights = X[~mask], Y[~mask], self.weights[~mask]
+
+        return left_X, left_Y, left_weights, right_X, right_Y, right_weights
+    
+    def calc_AoS(self, total_error): # Calculate Amount of Say, negative amount of say flip the classification
+
+        e = 1e-9
+        return np.log((1-total_error + e)/(total_error + e)) + np.log(self.labels - 1)
+
+    def update_weights(self, indices, aos): # indices_of_incorrectly_classified_weights
+
+        mask = np.ones(len(self.weights), dtype=bool)
+        mask[indices] = False
+        rest_indices = np.arange(len(self.weights))[mask]
+
+        for i in indices:
+
+            self.weights[i] = self.weights[i] * np.exp(aos)
+        
+        for j in rest_indices:
+            
+            self.weights[j] = self.weights[j] * np.exp(-aos)
+
+        sum = np.sum(self.weights)
+
+        self.weights /= sum
+    
+model = AdaBoost(150)
 model.build_forest(X_train, Y_train)
-model.build_stump(X_train, Y_train)
-
+model.predict(X_test, Y_test)
 
 
 

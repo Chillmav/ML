@@ -34,7 +34,7 @@ Y_test = np.hstack((np.ones(n//5), np.zeros(n//5)))
 
 
 
-class SVM:
+class PrimalSVM:
     
      def __init__(self, regularization_param=10, lr=0.01, epochs=1000):
      
@@ -117,6 +117,6 @@ class SVM:
           return Y
 
 
-model = SVM()
+model = PrimalSVM()
 model.train(X, Y)
 model.test(X_test, Y_test)
