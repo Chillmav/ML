@@ -155,7 +155,6 @@ class GradientBoostRegressionTrees:
         return np.sum((Y_predicted - Y_real)**2)
 
 model = GradientBoostRegressionTrees()
-
 model.train(X_train, Y_train)
 predictions = model.predict(X_test)
 model.evaluate(predictions, Y_test)
