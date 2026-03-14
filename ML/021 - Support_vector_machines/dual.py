@@ -6,20 +6,20 @@ np.random.seed(42)
 
 n = 100
 
-x1_class1 = np.random.uniform(600, 900, n)
-x1_class2 = np.random.uniform(100, 400, n)
+x1_class1 = np.random.normal(700, 120, n)
+x2_class1 = np.random.normal(7, 1.2, n)
 
-x2_class1 = np.random.uniform(6, 9, n)
-x2_class2 = np.random.uniform(1, 4, n)
+x1_class2 = np.random.normal(400, 120, n)
+x2_class2 = np.random.normal(4, 1.2, n)
 
 X_class1 = np.column_stack((x1_class1, x2_class1))
 X_class2 = np.column_stack((x1_class2, x2_class2))
 
-x1_class1_t = np.random.uniform(600, 900, n // 5)
-x1_class2_t = np.random.uniform(100, 400, n // 5)
+x1_class1_t = np.random.normal(700, 120, n // 5)
+x2_class1_t = np.random.normal(7, 1.2, n // 5)
 
-x2_class1_t = np.random.uniform(6, 9, n // 5)
-x2_class2_t = np.random.uniform(1, 4, n // 5)
+x1_class2_t = np.random.normal(400, 120, n // 5)
+x2_class2_t = np.random.normal(4, 1.2, n // 5)
 
 X_class1_t = np.column_stack((x1_class1_t, x2_class1_t))
 X_class2_t = np.column_stack((x1_class2_t, x2_class2_t))
@@ -62,17 +62,26 @@ class dualSVM:
 
         pass
 
+    def label_Y(self, Y):
 
+        inherent_labels = np.unique(Y)
+        if len(inherent_labels) > 2:
+            raise Exception("This is binary SVM so no more than 2 classes are permitted")
+        Y[Y == 0] = -1
+        
+        return Y
+    
     def train(self, X, Y):
 
         self.m, self.n = np.shape(X)
         self.alphas = np.zeros(self.m)
         self.w = np.zeros(self.n)
-        self.error = np.zeros(self.m)
-
-        self.X, self.mean, self.std = self.standardize(X)
-        self.Y = Y
-
+        self.X = self.standardize(X)
+        self.Y = self.label_Y(Y)
+        self.error = np.array([
+            self.predict(self.X[i]) - self.Y[i]
+            for i in range(self.m)
+        ])
         epoch = 0
         num_changed = 0
         examine_all = 1
@@ -99,14 +108,15 @@ class dualSVM:
 
             epoch += 1
 
-    def linear_kernel(self, x1, x2):
+        self.plot_graph(X)
+        
+    def linear_kernel(self, X, x):
 
-        return np.dot(x1, x2)
+        return X @ x
     
     def predict(self, x):
 
-        result = (self.alphas * self.Y) @ self.kernel_function(self.X, x) + self.b
-        return result
+        return self.w @ x + self.b
     
     def take_step(self, l1, l2):
 
@@ -169,28 +179,29 @@ class dualSVM:
             b = (b1 + b2) / 2
 
         self.w = self.w + y1*(alpha1_new-alpha1)*x1 + y2*(alpha2_new - alpha2)*x2
-        
+
+        self.alphas[l1] = alpha1_new
+        self.alphas[l2] = alpha2_new
+        self.b = b
+
         self.error[l1] = 0
         self.error[l2] = 0
 
-        l_list = [idx for idx, alpha in enumerate(self.alphas) 
-                      if 0 < alpha and alpha < self.C]
-        
-        for l in l_list:
-            self.error[l] += y1 * (alpha1_new - alpha1) * self.kernel_function(x1, self.X[l,:]) + y2 * (alpha2_new - alpha2) * self.kernel_function(x2, self.X[l,:]) + (self.b - b)
+        for i in range(self.m):
+            self.error[i] = self.predict(self.X[i]) - self.Y[i]
             
         return 1
 
     def examine_example(self, l2):
 
         y2 = self.Y[l2]
-        x2 = self.Y[l2]
+        x2 = self.X[l2]
         alpha2 = self.alphas[l2]
         E2 = self.error[l2]
         r2 = E2 * y2
 
         if ((r2 < -self.tol and alpha2 < self.C) or (r2 > self.tol and alpha2 > 0)):
-            if len(self.alphas[(0 < self.alphas) and (self.alphas < self.C)]) > 1:
+            if len(self.alphas[(self.alphas > 0) & (self.alphas < self.C)]) > 1:
 
                 if E2 > 0:
                     l1 = np.argmin(self.error)
@@ -220,15 +231,58 @@ class dualSVM:
 
         return self.predict(x1) - y1
 
-    def standardize(self, X):
+    def standardize(self, X, train=True):
 
-        mean = self.mean if self.mean != 0 else np.mean(X, axis = 0)
-        std = self.std if self.std != 0 else np.std(X, axis=0)
+        if train:
+            self.mean = np.mean(X, axis=0)
+            self.std = np.std(X, axis=0)
 
-        return (X - mean) / std, mean, std
+        return (X - self.mean) / self.std
+
+    def test(self, X_test, Y_test):
+        
+        X_original = X_test
+        X_test = self.standardize(X_test, train=False)
+        Y_test = self.label_Y(Y_test)
+
+        predictions = np.sign([
+            self.predict(x) for x in X_test
+        ])
+
+        predictions = self.label_Y(predictions)
+
+        print(np.sum(predictions == Y_test) / len(Y_test))
+        self.plot_graph(X_original)
+        return np.sum(predictions == Y_test) / len(Y_test)
     
+    def plot_graph(self, X):
+
+        plt.scatter(X[:,0], X[:,1])
+
+        x1 = np.linspace(np.min(X[:,0]), np.max(X[:,0]), 100)
+
+        w1, w2 = self.w
+        mu1, mu2 = self.mean
+        s1, s2 = self.std
+
+        x2 = (s2/w2) * (-(w1/s1)*(x1 - mu1) - self.b) + mu2
+        
+        plt.plot(x1, x2, color="green")
+
+        # margines:
+
+        x2_1 = x2 = (s2/w2) * (-(w1/s1)*(x1 - mu1) - self.b - 1) + mu2
+        x2_2 = x2 = (s2/w2) * (-(w1/s1)*(x1 - mu1) - self.b + 1) + mu2
+
+        plt.plot(x1, x2_1, linestyle="dashed", color="orange")
+        plt.plot(x1, x2_2, linestyle="dashed", color="orange")
+        plt.show()
+
+
 model = dualSVM()
-model.train(X_test, Y_test)
+model.train(X, Y)
+model.test(X_test, Y_test)
+
 
 
         

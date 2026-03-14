@@ -11,7 +11,6 @@ X = diabetes.data
 Y = diabetes.target
 X_train, X_test, Y_train, Y_test = train_test_split(X, Y)
 
-
 class Node:
 
     def __init__(self, feature=None, threshold=None, left=None, right=None, value=None, gain=None, weight=None):
