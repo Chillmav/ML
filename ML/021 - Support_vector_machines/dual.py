@@ -35,7 +35,7 @@ Y_test = np.hstack((np.ones(n//5), np.zeros(n//5)))
 
 class dualSVM:
 
-    def __init__(self, kernel="linear", epochs = 300, C=1, b=0, eps=1e-8, tol=1e-5):
+    def __init__(self, kernel="linear", epochs = 300, C=1, b=0, eps=1e-8, tol=1e-5, poly_degree=2, c=0):
 
         self.kernel = kernel
         self.epochs = epochs
@@ -45,6 +45,7 @@ class dualSVM:
         self.eps = eps
         self.alphas = 0
         self.w = 0
+        self.d = poly_degree
 
         # training data
         self.X = 0
@@ -58,9 +59,13 @@ class dualSVM:
 
         # kernel function
 
-        self.kernel_function = self.linear_kernel if kernel == "linear" else None
+        kernels = {
+            "linear": self.linear_kernel,
+            "polynomial": self.poly_kernel,
+            "rbf": self.rbf_kernel
+        }
 
-        pass
+        self.kernel_function = kernels[kernel]
 
     def label_Y(self, Y):
 
@@ -82,6 +87,7 @@ class dualSVM:
             self.predict(self.X[i]) - self.Y[i]
             for i in range(self.m)
         ])
+
         epoch = 0
         num_changed = 0
         examine_all = 1
@@ -110,20 +116,33 @@ class dualSVM:
 
         self.plot_graph(X)
         
-    def linear_kernel(self, X, x):
+    def linear_kernel(self, x1, x2, c=0):
 
-        return X @ x
+        return x1 @ x2.T + c
     
+    def poly_kernel(self, x1, x2, c=0):
+
+        return (x1 @ x2.T + c)**self.d
+    
+    def rbf_kernel(self, x1, x2, sigma=1):
+
+        if np.ndim(x1) > 1:
+            return np.exp(-(np.linalg.norm(x1 - x2, axis=1)**2) / (2*sigma**2))
+        else:
+            return np.exp(-(np.linalg.norm(x1 - x2)**2) / (2*sigma**2))
+        
     def predict(self, x):
 
-        return self.w @ x + self.b
+        K = self.kernel_function(self.X, x)
+        result = np.sum(self.alphas * self.Y * K) + self.b
+        return result
     
     def take_step(self, l1, l2):
 
         if (l1 == l2): return 0
 
-        x1 = self.X[l1, :]
-        x2 = self.X[l2, :]
+        x1 = self.X[l1]
+        x2 = self.X[l2]
         y1 = self.Y[l1]
         y2 = self.Y[l2]
 
@@ -133,8 +152,8 @@ class dualSVM:
         b = self.b
         s = y1 * y2
 
-        E1 = self.calc_error(x1, y1)
-        E2 = self.calc_error(x2, y2)
+        E1 = self.calc_error(l1)
+        E2 = self.calc_error(l2)
 
         if y1 != y2:
             L = max(0, alpha2 - alpha1)
@@ -198,11 +217,17 @@ class dualSVM:
         x2 = self.X[l2]
         alpha2 = self.alphas[l2]
         E2 = self.error[l2]
-        r2 = E2 * y2
+        r2 = E2 * y2 # kkt violation indicator
 
         if ((r2 < -self.tol and alpha2 < self.C) or (r2 > self.tol and alpha2 > 0)):
-            if len(self.alphas[(self.alphas > 0) & (self.alphas < self.C)]) > 1:
 
+            # if alpha = 0 then it means that its outside margin so we dont care about them
+            # if alpha is between 0 and C then its the support vector
+            # if alpha is > C then its inside margin
+
+            if len(self.alphas[(self.alphas > 0) & (self.alphas < self.C)]) > 1: # for alphas 0 < alpha < C (support vectors)
+
+                # maximizing |E1 - E2|
                 if E2 > 0:
                     l1 = np.argmin(self.error)
                 else:
@@ -215,11 +240,13 @@ class dualSVM:
                            if 0 < alpha and alpha < self.C]
         
         l1_list = np.roll(l1_list, np.random.choice(np.arange(self.m)))
+
         for l1 in l1_list:
             if self.take_step(l1, l2):
                 return 1
 
         l1_list = np.roll(np.arange(self.m), np.random.choice(np.arange(self.m)))
+
         for l1 in l1_list:
             if self.take_step(l1, l2):
                 return 1
@@ -227,9 +254,9 @@ class dualSVM:
         return 0
     
 
-    def calc_error(self, x1, y1):
+    def calc_error(self, i):
 
-        return self.predict(x1) - y1
+        return self.predict(self.X[i, :]) - self.Y[i]
 
     def standardize(self, X, train=True):
 
@@ -245,11 +272,7 @@ class dualSVM:
         X_test = self.standardize(X_test, train=False)
         Y_test = self.label_Y(Y_test)
 
-        predictions = np.sign([
-            self.predict(x) for x in X_test
-        ])
-
-        predictions = self.label_Y(predictions)
+        predictions = np.array([np.sign(self.predict(x)) for x in X_test])
 
         print(np.sum(predictions == Y_test) / len(Y_test))
         self.plot_graph(X_original)
@@ -276,10 +299,10 @@ class dualSVM:
 
         plt.plot(x1, x2_1, linestyle="dashed", color="orange")
         plt.plot(x1, x2_2, linestyle="dashed", color="orange")
+
         plt.show()
 
-
-model = dualSVM()
+model = dualSVM(kernel="rbf")
 model.train(X, Y)
 model.test(X_test, Y_test)
 
