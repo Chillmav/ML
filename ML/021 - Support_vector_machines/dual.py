@@ -35,7 +35,7 @@ Y_test = np.hstack((np.ones(n//5), np.zeros(n//5)))
 
 class dualSVM:
 
-    def __init__(self, kernel="linear", epochs = 300, C=1, b=0, eps=1e-8, tol=1e-5, poly_degree=2, c=0):
+    def __init__(self, kernel="linear", epochs = 600, C=1, b=0, eps=1e-8, tol=1e-5, poly_degree=2, c=0):
 
         self.kernel = kernel
         self.epochs = epochs
