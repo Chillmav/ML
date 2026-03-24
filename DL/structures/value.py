@@ -34,6 +34,10 @@ class Value:
     def __radd__(self, other):
         return self + other
     
+    def __rsub__(self, other):
+        
+        return -self + other
+    
     def __mul__(self, other: Value):
 
         other = other if isinstance(other, Value) else Value(other)
@@ -85,6 +89,28 @@ class Value:
             
         return out
     
+    def relu(self):
+        out = Value(0 if self.data < 0 else self.data, (self,), 'ReLU')
+
+        def _backward():
+            self.grad += (out.data > 0) * out.grad
+        out._backward = _backward
+
+        return out
+    
+    def sigmoid(self):
+
+        n = self.data
+        t = (math.exp(n) / (math.exp(n) + 1))
+        out = Value(t, (self, ), "sigmoid")
+
+        def _backward():
+            self.grad += t * (1 - t) * out.grad
+        
+        out._backward = _backward
+
+        return out
+
     def exp(self):
     
         n = self.data
@@ -116,26 +142,5 @@ class Value:
         for node in reversed(topo):
             node._backward()
 
-def lol1():
 
-    x1 = Value(2.0, label="x1")
-    x2 = Value(0.0, label="x2")
 
-    w1 = Value(-3.0, label="w1")
-    w2 = Value(1.0, label='w2')
-
-    b = Value(6.8813735870195432, label='b')
-
-    x1w1 = x1*w1; x1w1.label='x1*w1'
-    x2w2 = x2*w2; x2w2.label='x2*w2'
-    x1w1x2w2 = x1w1 + x2w2; x1w1x2w2.label = 'x1*w1 + x2*w2'
-    n = x1w1x2w2 +  b; n.label='n'
-    # o = n.tanh(); o.label='o'
-    e = (2*n).exp()
-    o = (e-1) / (e+1); o.label='o'    
-
-    o.backward()
-
-    print(x2.grad)
-
-lol1()
