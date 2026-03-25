@@ -8,9 +8,8 @@ class Tensor:
     def __init__(self, data, _children=(), _op='', label=''):
 
         self.data = np.array(data) if not isinstance(data, np.ndarray) else data # (batch_size, features)
-
         if self.data.shape == ():
-            self.data = self.data.reshape(1, 1)
+            self.data = np.array([[self.data]])
 
         self.grad = np.zeros_like(self.data, dtype=np.float64)
         self._prev = set(_children)
@@ -22,6 +21,21 @@ class Tensor:
 
         return f"Tensor(data={self.data})"
     
+    def reduce_grad(self, grad: np.ndarray, target_shape):
+
+        while len(grad.shape) > len(target_shape):
+
+            grad = grad.sum(axis=0)
+
+        for i in range(len(target_shape)):
+            if target_shape[i] == 1:
+                grad = grad.sum(axis=i, keepdims=True)
+
+        return grad
+    
+    def item(self):
+        return self.data.item()
+    
     def __add__(self, other: Tensor):
 
         other = other if isinstance(other, Tensor) else Tensor(other)
@@ -30,31 +44,36 @@ class Tensor:
         
         def _backward():
 
-            self.grad += out.grad
-
-            if other.data.shape == out.grad.shape:
-                other.grad += out.grad
-            else:
-                other.grad += out.grad.sum(axis=0)
+            self.grad += self.reduce_grad(out.grad, self.data.shape)
+            other.grad += self.reduce_grad(out.grad, other.data.shape)
 
         out._backward = _backward
 
         return out
     
+    def log(self):
+
+        eps = 1e-8
+        out = Tensor(np.log(self.data + eps), (self,), 'log')
+
+        def _backward():
+            self.grad += (1 / (self.data + eps)) * out.grad
+
+        out._backward = _backward
+        return out
+
     def __mul__(self, other: Tensor):
 
         other = other if isinstance(other, Tensor) else Tensor(other)
     
         out = Tensor(self.data * other.data, (self, other), '*')
+
         def _backward():
-            self.grad += other.data * out.grad
 
-            grad_other = self.data * out.grad
+            self.grad += self.reduce_grad(other.data * out.grad, self.grad.shape)
+            other.grad += self.reduce_grad(self.data * out.grad, other.grad.shape)
 
-            if other.grad.shape != grad_other.shape:
-                grad_other = grad_other.sum(axis=0, keepdims=True)
-
-            other.grad += grad_other
+        out._backward = _backward
 
         return out
     
@@ -69,8 +88,8 @@ class Tensor:
         out = Tensor(self.data @ other.data, (self, other), "@")
 
         def _backward():
-            self.grad += out.grad @ other.data.T
-            other.grad += self.data.T @ out.grad
+            self.grad += out.grad @ other.data.T # X.grad
+            other.grad += self.data.T @ out.grad # W.grad
 
         out._backward = _backward
 
@@ -88,6 +107,10 @@ class Tensor:
         
         out._backward = _backward
         return out
+    
+    def __truediv__(self, other):
+        
+        return self * other**-1
     
     def relu(self):
 
@@ -147,9 +170,7 @@ class Tensor:
             node._backward()
 
     def sum(self):
-        # sum1 = np.sum(self.data, axis = 0) -> I sum up loss inside each output over samples
-        # sum2 = np.sum(sum1) -> I sum up total loss over different outputs
-        # total sum is just np.sum(self.data)
+
         out = Tensor(np.sum(self.data), (self, ), 'sum')
 
         def _backward():
@@ -158,7 +179,7 @@ class Tensor:
         out._backward = _backward
 
         return out
-    
+
     def __radd__(self, other: Tensor):
 
         return self + other
@@ -173,3 +194,4 @@ class Tensor:
 
     def __neg__(self):
         return self * -1
+
