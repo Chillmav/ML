@@ -34,6 +34,7 @@ class Tensor:
         return grad
     
     def item(self):
+
         return self.data.item()
     
     def __add__(self, other: Tensor):
@@ -148,7 +149,21 @@ class Tensor:
         out._backward = _backward
 
         return out
+    
+    def exp(self):
 
+        n = self.data
+        t = np.exp(n)
+        out = Tensor(t, (self, ), "exp")
+
+        def _backward():
+
+            self.grad += t * out.grad
+
+        out._backward = _backward
+
+        return out
+    
     def backward(self):
 
         topo = []
@@ -169,8 +184,18 @@ class Tensor:
         for node in reversed(topo):
             node._backward()
 
-    def sum(self):
+    def sum(self, axis=None):
 
+        if axis==1:
+            out = Tensor(np.sum(self.data, axis=1, keepdims=True), (self, ), "sum, axis=1")
+        
+            def _backward():
+                self.grad += np.repeat(out.grad, self.grad.shape[1], axis=1)
+
+            out._backward = _backward
+
+            return out
+        
         out = Tensor(np.sum(self.data), (self, ), 'sum')
 
         def _backward():

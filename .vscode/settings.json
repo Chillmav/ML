@@ -1,0 +1,15 @@
+{
+    "files.exclude": {
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/.DS_Store": true,
+        "**/Thumbs.db": true,
+        "DL/structures/__pycache__": true,
+        "DL/structures/tempCodeRunnerFile.py": true
+    },
+    "hide-files.files": [
+        "DL/structures/__pycache__",
+        "DL/structures/tempCodeRunnerFile.py"
+    ]
+}
