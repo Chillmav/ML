@@ -6,7 +6,6 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.datasets import load_wine
 
-
 df = pd.read_csv("PCA_LDA_project\data\Iris.csv")
 
 X = df[["SepalLengthCm", "SepalWidthCm", "PetalLengthCm", "PetalWidthCm"]].values
@@ -101,6 +100,5 @@ plt.show()
 # PC1 = 0.361 * SepalLengthCm - 0.08 * SepalWidthCm + 0.85 * PetalLengthCm + 0.36 * PetalWidthCm
 # PC2 = 0.656 * SepalLengthCm + 0.73 * SepalWidthCm - 0.17 * PetalLengthCm - 0.07 * PetalWidthCm
 
-# Wine
 
 
